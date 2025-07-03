@@ -1,4 +1,4 @@
-import type { Context } from "@netlify/functions";
+import type { Context, Handler, HandlerContext, HandlerEvent } from "@netlify/functions";
 
 const notity = async( message: string ) => {
 
@@ -18,13 +18,62 @@ const notity = async( message: string ) => {
     return true;
 }
 
-export default async (req: Request, context: Context) => {
+const onStar = ( payload: any ): string => {
+    
+    const { action, sender, repository, starred_at } = payload;
 
-    await notity('Hola Mundo desde Netlify Dev');
+    return `User ${ sender.login } ${ action } star on ${repository.full_name}`
+}
 
-    return new Response("Done", {
+const onIssue = ( payload: any ): string => {
+    
+    const { action, issue } = payload
+
+    if ( action === 'opened' ){
+        return `An issue was opened with this title ${ issue.title }`
+    }
+
+    if ( action === 'closed' ){
+        return `An issue was closed by ${ issue.user.login }`
+    }
+
+    if ( action === 'reopened' ){
+        return `An issue was reopened by ${ issue.user.login }`
+    }
+
+    return `Unhandled action for the issue event ${ action }`;
+}
+
+const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+
+    const githubEvent = event.headers['x-github-event'] ?? 'unknown';
+    const payload = JSON.parse(event.body ?? '{}');
+    let message: string;
+
+    console.log(payload);
+
+    switch( githubEvent ){
+    case 'star':
+        message = onStar( payload );
+        break
+    
+    case 'issues':
+        message = onIssue( payload )
+        break;
+
+    default:
+        message = `Unkown event ${githubEvent}`
+    }
+
+    await notity(message);
+
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+            message: 'done'
+        }),
         headers: {
-            'Content-Type': 'application/json'
+            'Content-type': 'application/json'
         }
-    })
+    }
 }
